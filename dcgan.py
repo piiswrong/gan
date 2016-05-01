@@ -159,13 +159,15 @@ if __name__ == '__main__':
         wd=0.,
         beta1=beta1,
         rescale_grad=1.0/train_iter.batch_size,
+        clip_gradient=5.0,
         sym=gout,
         param_idx2name={i:n for i, n in enumerate(gout.list_arguments())})
     dopt = mx.optimizer.Adam(
         learning_rate=lr,
         wd=0.,
         beta1=beta1,
-        rescale_grad=1.0/train_iter.batch_size/2.0,
+        rescale_grad=1.0/train_iter.batch_size,
+        clip_gradient=5.0,
         sym=dloss,
         param_idx2name={i:n for i, n in enumerate(dloss.list_arguments())})
     gupdater = mx.optimizer.get_updater(gopt)
@@ -240,11 +242,11 @@ if __name__ == '__main__':
             if t % 10 == 0:
                 print 'epoch:', epoch, 'iter:', t, 'metric:', acc, err_g, err_d
                 #print dlexec.outputs[0].asnumpy().squeeze()
-                #visual('gout', gexec.outputs[0].asnumpy())
+                visual('gout', gexec.outputs[0].asnumpy())
                 #visual('data', batch.data[0].asnumpy())
                 diff = dldiff.asnumpy()
                 diff = (diff - diff.mean())/diff.std()
-                #visual('diff', diff)
+                visual('diff', diff)
 
 
 

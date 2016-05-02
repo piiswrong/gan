@@ -56,44 +56,44 @@ def make_torch_sym():
 def make_dcgan_sym(ngf, ndf, nc):
     rand = mx.sym.Variable('rand')
 
-    g1 = mx.sym.Deconvolution(rand, name='g1', kernel=(4,4), num_filter=ngf*8)
+    g1 = mx.sym.Deconvolution(rand, name='g1', kernel=(4,4), num_filter=ngf*8, no_bias=True)
     gbn1 = mx.sym.BatchNorm(g1, name='gbn1', fix_gamma=False)
     gact1 = mx.sym.Activation(gbn1, name='gact1', act_type='relu')
 
-    g2 = mx.sym.Deconvolution(gact1, name='g2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*4)
+    g2 = mx.sym.Deconvolution(gact1, name='g2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*4, no_bias=True)
     gbn2 = mx.sym.BatchNorm(g2, name='gbn2', fix_gamma=False)
     gact2 = mx.sym.Activation(gbn2, name='gact2', act_type='relu')
 
-    g3 = mx.sym.Deconvolution(gact2, name='g3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*2)
+    g3 = mx.sym.Deconvolution(gact2, name='g3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*2, no_bias=True)
     gbn3 = mx.sym.BatchNorm(g3, name='gbn3', fix_gamma=False)
     gact3 = mx.sym.Activation(gbn3, name='gact3', act_type='relu')
 
-    g4 = mx.sym.Deconvolution(gact3, name='g4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf)
+    g4 = mx.sym.Deconvolution(gact3, name='g4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf, no_bias=True)
     gbn4 = mx.sym.BatchNorm(g4, name='gbn4', fix_gamma=False)
     gact4 = mx.sym.Activation(gbn4, name='gact4', act_type='relu')
 
-    g5 = mx.sym.Deconvolution(gact4, name='g5', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=nc)
+    g5 = mx.sym.Deconvolution(gact4, name='g5', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=nc, no_bias=True)
     gout = mx.sym.Activation(g5, name='gact5', act_type='tanh')
 
     data = mx.sym.Variable('data')
     label = mx.sym.Variable('label')
 
-    d1 = mx.sym.Convolution(data, name='d1', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf)
+    d1 = mx.sym.Convolution(data, name='d1', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf, no_bias=True)
     dact1 = mx.sym.LeakyReLU(d1, name='dact1', act_type='leaky', slope=0.2)
 
-    d2 = mx.sym.Convolution(dact1, name='d2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*2)
+    d2 = mx.sym.Convolution(dact1, name='d2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*2, no_bias=True)
     dbn2 = mx.sym.BatchNorm(d2, name='dbn2', fix_gamma=False)
     dact2 = mx.sym.LeakyReLU(dbn2, name='dact2', act_type='leaky', slope=0.2)
 
-    d3 = mx.sym.Convolution(dact2, name='d3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*4)
+    d3 = mx.sym.Convolution(dact2, name='d3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*4, no_bias=True)
     dbn3 = mx.sym.BatchNorm(d3, name='dbn3', fix_gamma=False)
     dact3 = mx.sym.LeakyReLU(dbn3, name='dact3', act_type='leaky', slope=0.2)
 
-    d4 = mx.sym.Convolution(dact3, name='d4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*8)
+    d4 = mx.sym.Convolution(dact3, name='d4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*8, no_bias=True)
     dbn4 = mx.sym.BatchNorm(d4, name='dbn4', fix_gamma=False)
     dact4 = mx.sym.LeakyReLU(dbn4, name='dact4', act_type='leaky', slope=0.2)
 
-    d5 = mx.sym.Convolution(dact4, name='d5', kernel=(4,4), num_filter=1)
+    d5 = mx.sym.Convolution(dact4, name='d5', kernel=(4,4), num_filter=1, no_bias=True)
     d5 = mx.sym.Flatten(d5)
 
     dloss = mx.sym.LogisticRegressionOutput(data=d5, label=label, name='dloss')
@@ -151,12 +151,103 @@ def visual(title, X):
     cv2.imshow(title, buff)
     cv2.waitKey(1)
 
-def update(updater, infos, inputs):
-    for i, info in enumerate(infos):
-        name, weight, grad = info
-        if name in inputs:
-            continue
-        updater(i, grad, weight)
+
+@register
+class Adam(Optimizer):
+    """Adam optimizer as described in [King2014]_.
+
+    .. [King2014] Diederik Kingma, Jimmy Ba,
+       *Adam: A Method for Stochastic Optimization*,
+       http://arxiv.org/abs/1412.6980
+
+    the code in this class was adapted from
+    https://github.com/mila-udem/blocks/blob/master/blocks/algorithms/__init__.py#L765
+
+    Parameters
+    ----------
+    learning_rate : float, optional
+        Step size.
+        Default value is set to 0.002.
+    beta1 : float, optional
+        Exponential decay rate for the first moment estimates.
+        Default value is set to 0.9.
+    beta2 : float, optional
+        Exponential decay rate for the second moment estimates.
+        Default value is set to 0.999.
+    epsilon : float, optional
+        Default value is set to 1e-8.
+    decay_factor : float, optional
+        Default value is set to 1 - 1e-8.
+
+    wd : float, optional
+        L2 regularization coefficient add to all the weights
+    rescale_grad : float, optional
+        rescaling factor of gradient.
+
+    clip_gradient : float, optional
+        clip gradient in range [-clip_gradient, clip_gradient]
+    """
+    def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8,
+                 decay_factor=(1 - 1e-8), **kwargs):
+        super(Adam, self).__init__(learning_rate=learning_rate, **kwargs)
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.epsilon = epsilon
+        self.decay_factor = decay_factor
+
+    def create_state(self, index, weight):
+        """Create additional optimizer state: mean, variance
+
+        Parameters
+        ----------
+        weight : NDArray
+            The weight data
+
+        """
+        return (zeros(weight.shape, weight.context, dtype=weight.dtype),  # mean
+                zeros(weight.shape, weight.context, dtype=weight.dtype))  # variance
+
+    def update(self, index, weight, grad, state):
+        """Update the parameters.
+
+        Parameters
+        ----------
+        index : int
+            An unique integer key used to index the parameters
+
+        weight : NDArray
+            weight ndarray
+
+        grad : NDArray
+            grad ndarray
+
+        state : NDArray or other objects returned by init_state
+            The auxiliary state used in optimization.
+        """
+        assert(isinstance(weight, NDArray))
+        assert(isinstance(grad, NDArray))
+        lr = self._get_lr(index)
+        self._update_count(index)
+
+        t = self._index_update_count[index]
+        mean, variance = state
+
+        grad *= self.rescale_grad
+        if self.clip_gradient is not None:
+            clip(grad, -self.clip_gradient, self.clip_gradient, out=grad)
+
+        mean[:] = self.beta1 * mean + (1. - self.beta1) * grad
+        variance[:] = self.beta2 * variance + (1. - self.beta2) * grad * grad
+
+        coef1 = 1. - self.beta1**t
+        coef2 = 1. - self.beta2**t
+        lr *= math.sqrt(coef2)/coef1
+
+        weight[:] -= lr*mean/(sqrt(variance) + self.epsilon)
+
+        wd = self._get_wd(index)
+        if wd > 0.:
+            weight[:] -= (lr * wd) * weight
 
 
 if __name__ == '__main__':

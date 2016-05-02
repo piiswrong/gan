@@ -100,8 +100,6 @@ def make_dcgan_sym(ngf, ndf, nc):
 
     return gout, dloss
 
-
-
 def get_mnist():
     mnist = fetch_mldata('MNIST original')
     np.random.seed(1234) # set seed for deterministic ordering
@@ -132,6 +130,32 @@ class RandIter(mx.io.DataIter):
     def getdata(self):
         return [mx.random.normal(0, 1.0, shape=(self.batch_size, self.ndim, 1, 1))]
 
+class ImagenetIter(mx.io.DataIter):
+    def __init__(self, batch_size, data_shape):
+        self.internal = mx.io.ImageRecordIter(
+            path_imgrec = '/archive/imagenet/train.rec',
+            data_shape  = data_shape,
+            batch_size  = batch_size,
+            rand_crop   = True,
+            rand_mirror = True,
+            max_crop_size = 256,
+            min_crop_size = 192)
+        self.provide_data = [('data', (batch_size,) + data_shape)]
+        self.provide_label = []
+
+    def reset(self):
+        self.internal.reset()
+
+    def iter_next(self):
+        return self.internal.iter_next()
+
+    def getdata(self):
+        data = self.internal.getdata()
+        data = data * (2.0/255.0)
+        data -= 1
+        return [data]
+
+
 def fill_buf(buf, i, img, shape):
     n = buf.shape[0]/shape[1]
     m = buf.shape[1]/shape[0]
@@ -152,8 +176,8 @@ def visual(title, X):
     cv2.waitKey(1)
 
 
-@register
-class Adam(Optimizer):
+@mx.optimizer.register
+class Adam(mx.optimizer.Optimizer):
     """Adam optimizer as described in [King2014]_.
 
     .. [King2014] Diederik Kingma, Jimmy Ba,
@@ -204,8 +228,8 @@ class Adam(Optimizer):
             The weight data
 
         """
-        return (zeros(weight.shape, weight.context, dtype=weight.dtype),  # mean
-                zeros(weight.shape, weight.context, dtype=weight.dtype))  # variance
+        return (mx.nd.zeros(weight.shape, weight.context, dtype=weight.dtype),  # mean
+                mx.nd.zeros(weight.shape, weight.context, dtype=weight.dtype))  # variance
 
     def update(self, index, weight, grad, state):
         """Update the parameters.
@@ -224,8 +248,8 @@ class Adam(Optimizer):
         state : NDArray or other objects returned by init_state
             The auxiliary state used in optimization.
         """
-        assert(isinstance(weight, NDArray))
-        assert(isinstance(grad, NDArray))
+        assert(isinstance(weight, mx.nd.NDArray))
+        assert(isinstance(grad, mx.nd.NDArray))
         lr = self._get_lr(index)
         self._update_count(index)
 
@@ -241,9 +265,9 @@ class Adam(Optimizer):
 
         coef1 = 1. - self.beta1**t
         coef2 = 1. - self.beta2**t
-        lr *= math.sqrt(coef2)/coef1
+        lr *= np.sqrt(coef2)/coef1
 
-        weight[:] -= lr*mean/(sqrt(variance) + self.epsilon)
+        weight[:] -= lr*mean/(mx.nd.sqrt(variance) + self.epsilon)
 
         wd = self._get_wd(index)
         if wd > 0.:
@@ -254,6 +278,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
     # =============setting============
+    dataset = 'imagenet'
     ndf = 64
     ngf = 64
     nc = 3
@@ -261,15 +286,18 @@ if __name__ == '__main__':
     Z = 100
     lr = 0.0002
     beta1 = 0.5
-    ctx = mx.gpu(0)
+    ctx = mx.gpu(3)
     #symG, symD = make_torch_sym()
     symG, symD = make_dcgan_sym(ngf, ndf, nc)
     #mx.viz.plot_network(symG, shape={'rand': (batch_size, 100, 1, 1)}).view()
     #mx.viz.plot_network(symD, shape={'data': (batch_size, nc, 64, 64)}).view()
 
     # ==============data==============
-    X_train, X_test = get_mnist()
-    train_iter = mx.io.NDArrayIter(X_train, batch_size=batch_size)
+    if dataset == 'mnist':
+        X_train, X_test = get_mnist()
+        train_iter = mx.io.NDArrayIter(X_train, batch_size=batch_size)
+    elif dataset == 'imagenet':
+        train_iter = ImagenetIter(batch_size, (3, 64, 64))
     rand_iter = RandIter(batch_size, Z)
     label = mx.nd.zeros((batch_size,), ctx=ctx)
 
@@ -387,6 +415,7 @@ if __name__ == '__main__':
                 diff = diffD[0].asnumpy()
                 diff = (diff - diff.mean())/diff.std()
                 visual('diff', diff)
+                visual('data', batch.data[0].asnumpy())
 
 
 

@@ -248,6 +248,29 @@ if __name__ == '__main__':
             modG.forward(rbatch, is_train=True)
             outG = modG.get_outputs()
 
+            # update discriminator on fake
+            label[:] = 0
+            modD.forward(mx.io.DataBatch(outG, [label]), is_train=True)
+            modD.backward()
+            #modD.update()
+            gradD = [[grad.copyto(grad.context) for grad in grads] for grads in modD._exec_group.grad_arrays]
+
+            modD.update_metric(mD, [label])
+            modD.update_metric(mACC, [label])
+
+            # update discriminator on real
+            label[:] = 1
+            batch.label = [label]
+            modD.forward(batch, is_train=True)
+            modD.backward()
+            for gradsr, gradsf in zip(modD._exec_group.grad_arrays, gradD):
+                for gradr, gradf in zip(gradsr, gradsf):
+                    gradr += gradf
+            modD.update()
+
+            modD.update_metric(mD, [label])
+            modD.update_metric(mACC, [label])
+
             # update generator
             label[:] = 1
             modD.forward(mx.io.DataBatch(outG, [label]), is_train=True)
@@ -258,24 +281,6 @@ if __name__ == '__main__':
 
             modD.update_metric(mG, [label])
 
-            # update discriminator on fake
-            label[:] = 0
-            modD.forward(mx.io.DataBatch(outG, [label]), is_train=True)
-            modD.backward()
-            modD.update()
-
-            modD.update_metric(mD, [label])
-            modD.update_metric(mACC, [label])
-
-            # update discriminator on real
-            label[:] = 1
-            batch.label = [label]
-            modD.forward(batch, is_train=True)
-            modD.backward()
-            modD.update()
-
-            modD.update_metric(mD, [label])
-            modD.update_metric(mACC, [label])
 
             if mon is not None:
                 mon.toc_print()

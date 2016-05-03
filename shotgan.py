@@ -4,100 +4,51 @@ from sklearn.datasets import fetch_mldata
 import logging
 import cv2
 
-def make_torch_sym():
+def make_dcgan_sym(ngf, ndf, nc, no_bias=True, fix_gamma=True, eps=1e-5 + 1e-12):
+    BatchNorm = mx.sym.CuDNNBatchNorm
     rand = mx.sym.Variable('rand')
 
-    g1 = mx.sym.TorchModule(rand, lua_string='nn.SpatialFullConvolution(100, 64 * 8, 4, 4)', name='g1', num_data=1, num_params=2, num_outputs=1)
-    gbn1 = mx.sym.TorchModule(data_0=g1, weight=mx.sym.Variable('gbn1_gamma'), bias=mx.sym.Variable('gbn1_beta'), lua_string='nn.SpatialBatchNormalization(64 * 8)', name='gbn1', num_data=1, num_params=2, num_outputs=1)
-    gact1 = mx.sym.TorchModule(gbn1, lua_string='nn.ReLU(false)', name='gact1', num_data=1, num_params=0, num_outputs=1)
-
-    g2 = mx.sym.TorchModule(gact1, lua_string='nn.SpatialFullConvolution(64 * 8, 64 * 4, 4, 4, 2, 2, 1, 1)', name='g2', num_data=1, num_params=2, num_outputs=1)
-    gbn2 = mx.sym.TorchModule(data_0=g2, weight=mx.sym.Variable('gbn2_gamma'), bias=mx.sym.Variable('gbn2_beta'), lua_string='nn.SpatialBatchNormalization(64 * 4)', name='gbn2', num_data=1, num_params=2, num_outputs=1)
-    gact2 = mx.sym.TorchModule(gbn2, lua_string='nn.ReLU(false)', name='gact2', num_data=1, num_params=0, num_outputs=1)
-
-    g3 = mx.sym.TorchModule(gact2, lua_string='nn.SpatialFullConvolution(64 * 4, 64 * 2, 4, 4, 2, 2, 1, 1)', name='g3', num_data=1, num_params=2, num_outputs=1)
-    gbn3 = mx.sym.TorchModule(data_0=g3, weight=mx.sym.Variable('gbn3_gamma'), bias=mx.sym.Variable('gbn3_beta'), lua_string='nn.SpatialBatchNormalization(64 * 2)', name='gbn3', num_data=1, num_params=2, num_outputs=1)
-    gact3 = mx.sym.TorchModule(gbn3, lua_string='nn.ReLU(false)', name='gact3', num_data=1, num_params=0, num_outputs=1)
-
-    g4 = mx.sym.TorchModule(gact3, lua_string='nn.SpatialFullConvolution(64 * 2, 64, 4, 4, 2, 2, 1, 1)', name='g4', num_data=1, num_params=2, num_outputs=1)
-    gbn4 = mx.sym.TorchModule(data_0=g4, weight=mx.sym.Variable('gbn4_gamma'), bias=mx.sym.Variable('gbn4_beta'), lua_string='nn.SpatialBatchNormalization(64)', name='gbn4', num_data=1, num_params=2, num_outputs=1)
-    gact4 = mx.sym.TorchModule(gbn4, lua_string='nn.ReLU(false)', name='gact4', num_data=1, num_params=0, num_outputs=1)
-
-    g5 = mx.sym.TorchModule(gact4, lua_string='nn.SpatialFullConvolution(64, 3, 4, 4, 2, 2, 1, 1)', name='g5', num_data=1, num_params=2, num_outputs=1)
-    gout = mx.sym.TorchModule(g5, lua_string='nn.Tanh()', name='gact5', num_data=1, num_params=0, num_outputs=1)
-
-    data = mx.sym.Variable('data')
-    label = mx.sym.Variable('label')
-
-    d1 = mx.sym.TorchModule(data, lua_string='nn.SpatialConvolution(3, 64, 4, 4, 2, 2, 1, 1)', name='d1', num_data=1, num_params=2, num_outputs=1)
-    dact1 = mx.sym.TorchModule(d1, lua_string='nn.LeakyReLU(0.2, false)', name='dact1', num_data=1, num_params=0, num_outputs=1)
-
-    d2 = mx.sym.TorchModule(dact1, lua_string='nn.SpatialConvolution(64, 64 * 2, 4, 4, 2, 2, 1, 1)', name='d2', num_data=1, num_params=2, num_outputs=1)
-    dbn2 = mx.sym.TorchModule(data_0=d2, weight=mx.sym.Variable('dbn2_gamma'), bias=mx.sym.Variable('dbn2_beta'), lua_string='nn.SpatialBatchNormalization(64 * 2)', name='dbn2', num_data=1, num_params=2, num_outputs=1)
-    dact2 = mx.sym.TorchModule(dbn2, lua_string='nn.LeakyReLU(0.2, false)', num_data=1, num_params=0, num_outputs=1)
-
-    d3 = mx.sym.TorchModule(dact2, lua_string='nn.SpatialConvolution(64 * 2, 64 * 4, 4, 4, 2, 2, 1, 1)', name='d3', num_data=1, num_params=2, num_outputs=1)
-    dbn3 = mx.sym.TorchModule(data_0=d3, weight=mx.sym.Variable('dbn3_gamma'), bias=mx.sym.Variable('dbn3_beta'), lua_string='nn.SpatialBatchNormalization(64 * 4)', name='dbn3', num_data=1, num_params=2, num_outputs=1)
-    dact3 = mx.sym.TorchModule(dbn3, lua_string='nn.LeakyReLU(0.2, false)', name='dact3', num_data=1, num_params=0, num_outputs=1)
-
-    d4 = mx.sym.TorchModule(dact3, lua_string='nn.SpatialConvolution(64 * 4, 64 * 8, 4, 4, 2, 2, 1, 1)', name='d4', num_data=1, num_params=2, num_outputs=1)
-    dbn4 = mx.sym.TorchModule(data_0=d4, weight=mx.sym.Variable('dbn4_gamma'), bias=mx.sym.Variable('dbn4_beta'), lua_string='nn.SpatialBatchNormalization(64 * 8)', name='dbn4', num_data=1, num_params=2, num_outputs=1)
-    dact4 = mx.sym.TorchModule(dbn4, lua_string='nn.LeakyReLU(0.2, false)', name='dact4', num_data=1, num_params=0, num_outputs=1)
-
-    d5 = mx.sym.TorchModule(dact4, lua_string='nn.SpatialConvolution(64 * 8, 1, 4, 4)', name='d5', num_data=1, num_params=2, num_outputs=1)
-    dact5 = d5#mx.sym.TorchModule(d5, lua_string='nn.Sigmoid()', name='dact5', num_data=1, num_params=0, num_outputs=1)
-    dact5 = mx.sym.Flatten(dact5)
-
-    #dloss = mx.sym.TorchCriterion(data=dact5, label=label, lua_string='nn.BCECriterion()', name='dloss')
-    dloss = mx.sym.LogisticRegressionOutput(data=dact5, label=label, name='dloss')
-
-    return gout, dloss
-
-def make_dcgan_sym(ngf, ndf, nc):
-    rand = mx.sym.Variable('rand')
-
-    g1 = mx.sym.Deconvolution(rand, name='g1', kernel=(4,4), num_filter=ngf*8, no_bias=True)
-    gbn1 = mx.sym.BatchNorm(g1, name='gbn1', fix_gamma=False)
+    g1 = mx.sym.Deconvolution(rand, name='g1', kernel=(4,4), num_filter=ngf*8, no_bias=no_bias)
+    gbn1 = BatchNorm(g1, name='gbn1', fix_gamma=fix_gamma, eps=eps)
     gact1 = mx.sym.Activation(gbn1, name='gact1', act_type='relu')
 
-    g2 = mx.sym.Deconvolution(gact1, name='g2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*4, no_bias=True)
-    gbn2 = mx.sym.BatchNorm(g2, name='gbn2', fix_gamma=False)
+    g2 = mx.sym.Deconvolution(gact1, name='g2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*4, no_bias=no_bias)
+    gbn2 = BatchNorm(g2, name='gbn2', fix_gamma=fix_gamma, eps=eps)
     gact2 = mx.sym.Activation(gbn2, name='gact2', act_type='relu')
 
-    g3 = mx.sym.Deconvolution(gact2, name='g3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*2, no_bias=True)
-    gbn3 = mx.sym.BatchNorm(g3, name='gbn3', fix_gamma=False)
+    g3 = mx.sym.Deconvolution(gact2, name='g3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf*2, no_bias=no_bias)
+    gbn3 = BatchNorm(g3, name='gbn3', fix_gamma=fix_gamma, eps=eps)
     gact3 = mx.sym.Activation(gbn3, name='gact3', act_type='relu')
 
-    g4 = mx.sym.Deconvolution(gact3, name='g4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf, no_bias=True)
-    gbn4 = mx.sym.BatchNorm(g4, name='gbn4', fix_gamma=False)
+    g4 = mx.sym.Deconvolution(gact3, name='g4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ngf, no_bias=no_bias)
+    gbn4 = BatchNorm(g4, name='gbn4', fix_gamma=fix_gamma, eps=eps)
     gact4 = mx.sym.Activation(gbn4, name='gact4', act_type='relu')
 
-    g5 = mx.sym.Deconvolution(gact4, name='g5', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=nc, no_bias=True)
+    g5 = mx.sym.Deconvolution(gact4, name='g5', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=nc, no_bias=no_bias)
     gout = mx.sym.Activation(g5, name='gact5', act_type='tanh')
 
     data = mx.sym.Variable('data')
     label = mx.sym.Variable('label')
 
-    d1 = mx.sym.Convolution(data, name='d1', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf, no_bias=True)
+    d1 = mx.sym.Convolution(data, name='d1', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf, no_bias=no_bias)
     dact1 = mx.sym.LeakyReLU(d1, name='dact1', act_type='leaky', slope=0.2)
 
-    d2 = mx.sym.Convolution(dact1, name='d2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*2, no_bias=True)
-    dbn2 = mx.sym.BatchNorm(d2, name='dbn2', fix_gamma=False)
+    d2 = mx.sym.Convolution(dact1, name='d2', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*2, no_bias=no_bias)
+    dbn2 = BatchNorm(d2, name='dbn2', fix_gamma=fix_gamma, eps=eps)
     dact2 = mx.sym.LeakyReLU(dbn2, name='dact2', act_type='leaky', slope=0.2)
 
-    d3 = mx.sym.Convolution(dact2, name='d3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*4, no_bias=True)
-    dbn3 = mx.sym.BatchNorm(d3, name='dbn3', fix_gamma=False)
+    d3 = mx.sym.Convolution(dact2, name='d3', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*4, no_bias=no_bias)
+    dbn3 = BatchNorm(d3, name='dbn3', fix_gamma=fix_gamma, eps=eps)
     dact3 = mx.sym.LeakyReLU(dbn3, name='dact3', act_type='leaky', slope=0.2)
 
-    d4 = mx.sym.Convolution(dact3, name='d4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*8, no_bias=True)
-    dbn4 = mx.sym.BatchNorm(d4, name='dbn4', fix_gamma=False)
+    d4 = mx.sym.Convolution(dact3, name='d4', kernel=(4,4), stride=(2,2), pad=(1,1), num_filter=ndf*8, no_bias=no_bias)
+    dbn4 = BatchNorm(d4, name='dbn4', fix_gamma=fix_gamma, eps=eps)
     dact4 = mx.sym.LeakyReLU(dbn4, name='dact4', act_type='leaky', slope=0.2)
 
-    d5 = mx.sym.Convolution(dact4, name='d5', kernel=(4,4), num_filter=1, no_bias=True)
+    d5 = mx.sym.Convolution(dact4, name='d5', kernel=(4,4), num_filter=1, no_bias=no_bias)
     d5 = mx.sym.Flatten(d5)
 
     dloss = mx.sym.LogisticRegressionOutput(data=d5, label=label, name='dloss')
-
     return gout, dloss
 
 def get_mnist():
@@ -172,9 +123,9 @@ def visual(title, X):
     buff = np.zeros((n*X.shape[1], n*X.shape[2], X.shape[3]), dtype=np.uint8)
     for i, img in enumerate(X):
         fill_buf(buff, i, img, X.shape[1:3])
+    buff = cv2.cvtColor(buff, cv2.COLOR_BGR2RGB)
     cv2.imshow(title, buff)
     cv2.waitKey(1)
-
 
 @mx.optimizer.register
 class Adam(mx.optimizer.Optimizer):
@@ -273,12 +224,11 @@ class Adam(mx.optimizer.Optimizer):
         if wd > 0.:
             weight[:] -= (lr * wd) * weight
 
-
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
     # =============setting============
-    dataset = 'imagenet'
+    dataset = 'mnist'
     ndf = 64
     ngf = 64
     nc = 3
@@ -286,8 +236,9 @@ if __name__ == '__main__':
     Z = 100
     lr = 0.0002
     beta1 = 0.5
-    ctx = mx.gpu(3)
-    #symG, symD = make_torch_sym()
+    ctx = mx.gpu(2)
+    check_point = False
+
     symG, symD = make_dcgan_sym(ngf, ndf, nc)
     #mx.viz.plot_network(symG, shape={'rand': (batch_size, 100, 1, 1)}).view()
     #mx.viz.plot_network(symD, shape={'data': (batch_size, nc, 64, 64)}).view()
@@ -416,6 +367,7 @@ if __name__ == '__main__':
                 diff = (diff - diff.mean())/diff.std()
                 visual('diff', diff)
                 visual('data', batch.data[0].asnumpy())
+
 
 
 

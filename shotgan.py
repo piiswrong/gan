@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.datasets import fetch_mldata
 import logging
 import cv2
+from datetime import datetime
 
 def make_dcgan_sym(ngf, ndf, nc, no_bias=True, fix_gamma=True, eps=1e-5 + 1e-12):
     BatchNorm = mx.sym.CuDNNBatchNorm
@@ -228,7 +229,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
     # =============setting============
-    dataset = 'mnist'
+    dataset = 'imagenet'
     ndf = 64
     ngf = 64
     nc = 3
@@ -237,7 +238,7 @@ if __name__ == '__main__':
     lr = 0.0002
     beta1 = 0.5
     ctx = mx.gpu(2)
-    check_point = False
+    check_point = True
 
     symG, symD = make_dcgan_sym(ngf, ndf, nc)
     #mx.viz.plot_network(symG, shape={'rand': (batch_size, 100, 1, 1)}).view()
@@ -304,6 +305,7 @@ if __name__ == '__main__':
     mACC = mx.metric.CustomMetric(facc)
 
     print 'Training...'
+    stamp =  datetime.now().strftime('%Y_%m_%d-%H_%M')
 
     # =============train===============
     for epoch in range(100):
@@ -368,6 +370,10 @@ if __name__ == '__main__':
                 visual('diff', diff)
                 visual('data', batch.data[0].asnumpy())
 
+        if check_point:
+            print 'Saving...'
+            modG.save_params('%s_G_%s-%04d.params'%(dataset, stamp, epoch))
+            modD.save_params('%s_D_%s-%04d.params'%(dataset, stamp, epoch))
 
 
 
